@@ -99,6 +99,29 @@ type OnebotGroupMessage struct {
 	IsBindedUserId  bool        `json:"is_binded_user_id,omitempty"`  //当前用户号号是否是binded后的
 }
 
+type OnebotGroupMessageS struct {
+	RawMessage      string      `json:"raw_message"`
+	MessageID       string      `json:"message_id"`
+	GroupID         string      `json:"group_id"` // Can be either string or int depending on p.Settings.CompleteFields
+	MessageType     string      `json:"message_type"`
+	PostType        string      `json:"post_type"`
+	SelfID          int64       `json:"self_id"` // Can be either string or int
+	Sender          Sender      `json:"sender"`
+	SubType         string      `json:"sub_type"`
+	Time            int64       `json:"time"`
+	Avatar          string      `json:"avatar,omitempty"`
+	Echo            string      `json:"echo,omitempty"`
+	Message         interface{} `json:"message"` // For array format
+	MessageSeq      int         `json:"message_seq"`
+	Font            int         `json:"font"`
+	UserID          string      `json:"user_id"`
+	RealMessageType string      `json:"real_message_type,omitempty"`  //当前信息的真实类型 group group_private guild guild_private
+	RealUserID      string      `json:"real_user_id,omitempty"`       //当前真实uid
+	RealGroupID     string      `json:"real_group_id,omitempty"`      //当前真实gid
+	IsBindedGroupId bool        `json:"is_binded_group_id,omitempty"` //当前群号是否是binded后的
+	IsBindedUserId  bool        `json:"is_binded_user_id,omitempty"`  //当前用户号号是否是binded后的
+}
+
 // 私聊信息事件
 type OnebotPrivateMessage struct {
 	RawMessage      string        `json:"raw_message"`
@@ -122,14 +145,16 @@ type OnebotPrivateMessage struct {
 
 // onebotv11标准扩展
 type OnebotInteractionNotice struct {
-	GroupID    int64                  `json:"group_id,omitempty"`
-	NoticeType string                 `json:"notice_type,omitempty"`
-	PostType   string                 `json:"post_type,omitempty"`
-	SelfID     int64                  `json:"self_id,omitempty"`
-	SubType    string                 `json:"sub_type,omitempty"`
-	Time       int64                  `json:"time,omitempty"`
-	UserID     int64                  `json:"user_id,omitempty"`
-	Data       *dto.WSInteractionData `json:"data,omitempty"`
+	GroupID     int64                  `json:"group_id,omitempty"`
+	NoticeType  string                 `json:"notice_type,omitempty"`
+	PostType    string                 `json:"post_type,omitempty"`
+	SelfID      int64                  `json:"self_id,omitempty"`
+	SubType     string                 `json:"sub_type,omitempty"`
+	Time        int64                  `json:"time,omitempty"`
+	UserID      int64                  `json:"user_id,omitempty"`
+	Data        *dto.WSInteractionData `json:"data,omitempty"`
+	RealUserID  string                 `json:"real_user_id,omitempty"`  //当前真实uid
+	RealGroupID string                 `json:"real_group_id,omitempty"` //当前真实gid
 }
 
 // onebotv11标准扩展
@@ -228,6 +253,26 @@ func (p *Processors) SendMessageToAllClients(message map[string]interface{}) err
 
 	// This will return nil if no errors were added
 	return result.ErrorOrNil()
+}
+
+// 方便快捷的发信息函数
+func (p *Processors) BroadcastMessageToAllFAF(message map[string]interface{}, api openapi.MessageAPI, data interface{}) error {
+	// 并发发送到我们作为客户端的Wsclient
+	for _, client := range p.Wsclient {
+		go func(c callapi.WebSocketServerClienter) {
+			_ = c.SendMessage(message) // 忽略错误
+		}(client)
+	}
+
+	// 并发发送到我们作为服务器连接到我们的WsServerClients
+	for _, serverClient := range p.WsServerClients {
+		go func(sc callapi.WebSocketServerClienter) {
+			_ = sc.SendMessage(message) // 忽略错误
+		}(serverClient)
+	}
+
+	// 不再等待所有 goroutine 完成，直接返回
+	return nil
 }
 
 // 方便快捷的发信息函数
@@ -579,7 +624,7 @@ func (p *Processors) HandleFrameworkCommand(messageText string, data interface{}
 	}
 
 	//link指令
-	if Type == "group" && strings.HasPrefix(cleanedMessage, config.GetLinkPrefix()) {
+	if strings.HasPrefix(cleanedMessage, config.GetLinkPrefix()) {
 		md, kb := generateMdByConfig()
 		SendMessageMd(md, kb, data, Type, p.Api, p.Apiv2)
 	}
@@ -845,7 +890,6 @@ func SendMessageMd(md *dto.Markdown, kb *keyboard.MessageKeyboard, data interfac
 		msgseq := echo.GetMappingSeq(msg.ID)
 		echo.AddMappingSeq(msg.ID, msgseq+1)
 		Message := &dto.MessageToCreate{
-			Content:  "markdown",
 			MsgID:    msg.ID,
 			MsgSeq:   msgseq,
 			Markdown: md,
@@ -889,7 +933,6 @@ func SendMessageMd(md *dto.Markdown, kb *keyboard.MessageKeyboard, data interfac
 		msgseq := echo.GetMappingSeq(msg.ID)
 		echo.AddMappingSeq(msg.ID, msgseq+1)
 		Message := &dto.MessageToCreate{
-			Content:  "markdown",
 			MsgID:    msg.ID,
 			MsgSeq:   msgseq,
 			Markdown: md,
@@ -1019,7 +1062,7 @@ func (p *Processors) Autobind(data interface{}) error {
 		//将真实id转为int userid64
 		GroupID64, userid64, err = idmap.StoreIDv2Pro(groupID, realID)
 		if err != nil {
-			mylog.Fatalf("Error storing ID689: %v", err)
+			mylog.Errorf("Error storing ID689: %v", err)
 		}
 	}
 	// 单独检查vuin和gid的绑定状态
@@ -1035,7 +1078,7 @@ func (p *Processors) Autobind(data interface{}) error {
 		// idmaps pro也更新
 		err = idmap.UpdateVirtualValuev2Pro(GroupID64, idValue, userid64, vuinValue)
 		if err != nil {
-			mylog.Fatalf("Error storing ID703: %v", err)
+			mylog.Errorf("Error storing ID703: %v", err)
 		}
 	} else if !vuinBound {
 		// 只有vuin未绑定，更新vuin映射

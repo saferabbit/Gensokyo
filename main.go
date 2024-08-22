@@ -7,13 +7,17 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
+
+	// _ "net/http/pprof"
 
 	"github.com/fatih/color"
 	"github.com/fsnotify/fsnotify"
@@ -21,6 +25,7 @@ import (
 	"github.com/hoshinonyaruko/gensokyo/acnode"
 	"github.com/hoshinonyaruko/gensokyo/botstats"
 	"github.com/hoshinonyaruko/gensokyo/config"
+	"github.com/hoshinonyaruko/gensokyo/echo"
 	"github.com/hoshinonyaruko/gensokyo/handlers"
 	"github.com/hoshinonyaruko/gensokyo/httpapi"
 	"github.com/hoshinonyaruko/gensokyo/idmap"
@@ -31,8 +36,11 @@ import (
 	"github.com/hoshinonyaruko/gensokyo/url"
 	"github.com/hoshinonyaruko/gensokyo/webui"
 	"github.com/hoshinonyaruko/gensokyo/wsclient"
+	"github.com/tencent-connect/botgo/sessions/multi"
+	"google.golang.org/grpc"
 
 	"github.com/gin-gonic/gin"
+	proto "github.com/hoshinonyaruko/gensokyo/proto"
 	"github.com/tencent-connect/botgo"
 	"github.com/tencent-connect/botgo/dto"
 	"github.com/tencent-connect/botgo/event"
@@ -119,6 +127,7 @@ func main() {
 	//logger
 	logLevel := mylog.GetLogLevelFromConfig(config.GetLogLevel())
 	loggerAdapter := mylog.NewMyLogAdapter(logLevel, config.GetSaveLogs())
+	mylog.SetLogLevel(logLevel)
 	botgo.SetLogger(loggerAdapter)
 
 	if *m {
@@ -273,13 +282,20 @@ func main() {
 
 			log.Printf("注册 intents: %v\n", intent)
 
+			// 确保p包含conf
+			p = Processor.NewProcessorV2(api, apiV2, &conf.Settings)
+
 			// 启动session manager以管理websocket连接
 			// 指定需要启动的分片数为 2 的话可以手动修改 wsInfo
 			if conf.Settings.ShardCount == 1 {
 				go func() {
-					wsInfo.Shards = 1
-					if err = botgo.NewSessionManager().Start(wsInfo, token, &intent); err != nil {
-						log.Fatalln(err)
+					wsInfo.Shards = uint32(conf.Settings.ShardNum)
+					if wsInfo.Shards == 1 {
+						if err = botgo.NewSessionManager().Start(wsInfo, token, &intent); err != nil {
+							log.Fatalln(err)
+						}
+					} else {
+						multi.NewShardManager(wsInfo, token, &intent).StartAllShards()
 					}
 				}()
 				log.Printf("不使用分片,所有信息都由当前gensokyo处理...\n")
@@ -394,7 +410,42 @@ func main() {
 		hr = gin.New()
 		hr.Use(gin.Recovery())
 	}
-	r.GET("/getid", server.GetIDHandler)
+	if !conf.Settings.LotusGrpc {
+		r.GET("/getid", server.GetIDHandler)
+	} else {
+		if conf.Settings.Lotus {
+			// 根据配置决定是否初始化 gRPC 客户端
+			if config.GetLotusGrpc() {
+				serverDir := config.GetServer_dir()
+				port := conf.Settings.LotusGrpcPort
+				conn, err := grpc.NewClient(serverDir+":"+strconv.Itoa(port), grpc.WithInsecure())
+				if err != nil {
+					panic(fmt.Sprintf("failed to connect to gRPC server: %v", err))
+				} else {
+					fmt.Printf("成功连接到GRPC服务器: %v\n", serverDir+":50051")
+				}
+				//初始化idmap中的全局grpc变量
+				idmap.GrpcClient = proto.NewIDMapServiceClient(conn)
+			}
+		} else {
+			// 初始化 gRPC 服务器
+			port := conf.Settings.LotusGrpcPort
+			lis, err := net.Listen("tcp", ":"+strconv.Itoa(port)) // gRPC 监听地址
+			if err != nil {
+				log.Fatalf("failed to listen: %v", err)
+			}
+
+			grpcServer := grpc.NewServer()
+
+			// 注册 gRPC 服务
+			proto.RegisterIDMapServiceServer(grpcServer, &idmap.Server{})
+
+			log.Println("Starting gRPC server on port :" + strconv.Itoa(port)) // gRPC 端口
+			if err := grpcServer.Serve(lis); err != nil {
+				log.Fatalf("failed to serve: %v", err)
+			}
+		}
+	}
 	r.GET("/updateport", server.HandleIpupdate)
 	r.POST("/uploadpic", server.UploadBase64ImageHandler(rateLimiter))
 	r.POST("/uploadpicv2", server.UploadBase64ImageHandlerV2(rateLimiter, apiV2))
@@ -532,6 +583,19 @@ func main() {
 		}()
 	}
 
+	// // 启动一个用于 pprof 的 HTTP 服务器
+	// go func() {
+	// 	log.Println("pprof server running on :6060")
+	// 	if err := http.ListenAndServe("localhost:6060", nil); err != nil {
+	// 		log.Fatalf("pprof server failed: %s", err)
+	// 	}
+	// }()
+
+	//杂七杂八的地方
+	if conf.Settings.MemoryMsgid {
+		echo.StartCleanupRoutine()
+	}
+
 	// 使用color库输出天蓝色的文本
 	cyan := color.New(color.FgCyan)
 	cyan.Printf("欢迎来到Gensokyo, 控制台地址: %s\n", webuiURL)
@@ -552,6 +616,11 @@ func main() {
 		if err != nil {
 			log.Printf("Error closing WebSocket connection: %v\n", err)
 		}
+	}
+
+	// 停止内存清理线程
+	if conf.Settings.MemoryMsgid {
+		echo.StopCleanupRoutine()
 	}
 
 	// 关闭BoltDB数据库
@@ -597,7 +666,9 @@ func ATMessageEventHandler() event.ATMessageEventHandler {
 				data.Author.Username = acnode.CheckWordIN(data.Author.Username)
 			}
 		}
-		return p.ProcessGuildATMessage(data)
+
+		go p.ProcessGuildATMessage(data)
+		return nil
 	}
 }
 
@@ -635,7 +706,8 @@ func DirectMessageHandler() event.DirectMessageEventHandler {
 				data.Author.Username = acnode.CheckWordIN(data.Author.Username)
 			}
 		}
-		return p.ProcessChannelDirectMessage(data)
+		go p.ProcessChannelDirectMessage(data)
+		return nil
 	}
 }
 
@@ -649,7 +721,8 @@ func CreateMessageHandler() event.MessageEventHandler {
 				data.Author.Username = acnode.CheckWordIN(data.Author.Username)
 			}
 		}
-		return p.ProcessGuildNormalMessage(data)
+		go p.ProcessGuildNormalMessage(data)
+		return nil
 	}
 }
 
@@ -657,7 +730,8 @@ func CreateMessageHandler() event.MessageEventHandler {
 func InteractionHandler() event.InteractionEventHandler {
 	return func(event *dto.WSPayload, data *dto.WSInteractionData) error {
 		mylog.Printf("收到按钮回调:%v", data)
-		return p.ProcessInlineSearch(data)
+		go p.ProcessInlineSearch(data)
+		return nil
 	}
 }
 
@@ -665,63 +739,80 @@ func InteractionHandler() event.InteractionEventHandler {
 func ThreadEventHandler() event.ThreadEventHandler {
 	return func(event *dto.WSPayload, data *dto.WSThreadData) error {
 		mylog.Printf("收到帖子事件:%v", data)
-		return p.ProcessThreadMessage(data)
+		go p.ProcessThreadMessage(data)
+		return nil
 	}
 }
 
 // GroupATMessageEventHandler 实现处理 群at 消息的回调
 func GroupATMessageEventHandler() event.GroupATMessageEventHandler {
 	return func(event *dto.WSPayload, data *dto.WSGroupATMessageData) error {
-		botstats.RecordMessageReceived()
+		go p.ProcessGroupMessage(data)
+
+		if !config.GetDisableErrorChan() {
+			botstats.RecordMessageReceived()
+		}
+
 		if config.GetEnableChangeWord() {
 			data.Content = acnode.CheckWordIN(data.Content)
 			if data.Author.Username != "" {
 				data.Author.Username = acnode.CheckWordIN(data.Author.Username)
 			}
 		}
-		return p.ProcessGroupMessage(data)
+
+		return nil
 	}
 }
 
 // C2CMessageEventHandler 实现处理 群私聊 消息的回调
 func C2CMessageEventHandler() event.C2CMessageEventHandler {
 	return func(event *dto.WSPayload, data *dto.WSC2CMessageData) error {
-		botstats.RecordMessageReceived()
+		go p.ProcessC2CMessage(data)
+
+		if !config.GetDisableErrorChan() {
+			botstats.RecordMessageReceived()
+		}
+
 		if config.GetEnableChangeWord() {
 			data.Content = acnode.CheckWordIN(data.Content)
 			if data.Author.Username != "" {
 				data.Author.Username = acnode.CheckWordIN(data.Author.Username)
 			}
 		}
-		return p.ProcessC2CMessage(data)
+
+		return nil
 	}
 }
 
 // GroupAddRobotEventHandler 实现处理 群机器人新增 事件的回调
 func GroupAddRobotEventHandler() event.GroupAddRobotEventHandler {
 	return func(event *dto.WSPayload, data *dto.GroupAddBotEvent) error {
-		return p.ProcessGroupAddBot(data)
+		go p.ProcessGroupAddBot(data)
+		return nil
 	}
 }
 
 // GroupDelRobotEventHandler 实现处理 群机器人删除 事件的回调
 func GroupDelRobotEventHandler() event.GroupDelRobotEventHandler {
 	return func(event *dto.WSPayload, data *dto.GroupAddBotEvent) error {
-		return p.ProcessGroupDelBot(data)
+		go p.ProcessGroupDelBot(data)
+		return nil
 	}
 }
 
 // GroupMsgRejectHandler 实现处理 群请求关闭机器人主动推送 事件的回调
 func GroupMsgRejectHandler() event.GroupMsgRejectHandler {
 	return func(event *dto.WSPayload, data *dto.GroupMsgRejectEvent) error {
-		return p.ProcessGroupMsgReject(data)
+		go p.ProcessGroupMsgReject(data)
+		return nil
 	}
 }
 
 // GroupMsgReceiveHandler 实现处理 群请求开启机器人主动推送 事件的回调
 func GroupMsgReceiveHandler() event.GroupMsgReceiveHandler {
 	return func(event *dto.WSPayload, data *dto.GroupMsgReceiveEvent) error {
-		return p.ProcessGroupMsgRecive(data)
+		go p.ProcessGroupMsgRecive(data)
+		return nil
 	}
 }
 

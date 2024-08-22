@@ -53,18 +53,21 @@ func HandleSendMsg(client callapi.Client, api openapi.OpenAPI, apiv2 openapi.Ope
 		}
 	}
 
-	if msgType == "" && message.Params.GroupID != nil && checkZeroGroupID(message.Params.GroupID) {
-		msgType = GetMessageTypeByGroupid(config.GetAppIDStr(), message.Params.GroupID)
+	if len(message.Params.GroupID.(string)) != 32 {
+		if msgType == "" && message.Params.GroupID != nil && checkZeroGroupID(message.Params.GroupID) {
+			msgType = GetMessageTypeByGroupid(config.GetAppIDStr(), message.Params.GroupID)
+		}
+		if msgType == "" && message.Params.UserID != nil && checkZeroUserID(message.Params.UserID) {
+			msgType = GetMessageTypeByUserid(config.GetAppIDStr(), message.Params.UserID)
+		}
+		if msgType == "" && message.Params.GroupID != nil && checkZeroGroupID(message.Params.GroupID) {
+			msgType = GetMessageTypeByGroupidV2(message.Params.GroupID)
+		}
+		if msgType == "" && message.Params.UserID != nil && checkZeroUserID(message.Params.UserID) {
+			msgType = GetMessageTypeByUseridV2(message.Params.UserID)
+		}
 	}
-	if msgType == "" && message.Params.UserID != nil && checkZeroUserID(message.Params.UserID) {
-		msgType = GetMessageTypeByUserid(config.GetAppIDStr(), message.Params.UserID)
-	}
-	if msgType == "" && message.Params.GroupID != nil && checkZeroGroupID(message.Params.GroupID) {
-		msgType = GetMessageTypeByGroupidV2(message.Params.GroupID)
-	}
-	if msgType == "" && message.Params.UserID != nil && checkZeroUserID(message.Params.UserID) {
-		msgType = GetMessageTypeByUseridV2(message.Params.UserID)
-	}
+
 	// New checks for UserID and GroupID being nil or 0
 	if (message.Params.UserID == nil || !checkZeroUserID(message.Params.UserID)) &&
 		(message.Params.GroupID == nil || !checkZeroGroupID(message.Params.GroupID)) {
@@ -72,31 +75,23 @@ func HandleSendMsg(client callapi.Client, api openapi.OpenAPI, apiv2 openapi.Ope
 		return "", nil
 	}
 
-	var idInt64, idInt642 int64
+	var idInt64 int64
 	var err error
 
-	var tempErr error
-
-	if message.Params.GroupID != "" {
-		idInt64, tempErr = ConvertToInt64(message.Params.GroupID)
-		if tempErr != nil {
-			err = tempErr
+	if len(message.Params.GroupID.(string)) == 32 {
+		if message.Params.GroupID != "" {
+			idInt64, err = idmap.GenerateRowID(message.Params.GroupID.(string), 9)
+		} else if message.Params.UserID != "" {
+			idInt64, err = idmap.GenerateRowID(message.Params.UserID.(string), 9)
 		}
-		idInt642, tempErr = ConvertToInt64(message.Params.UserID)
-		if tempErr != nil {
-			err = tempErr
+		// 临时的
+		msgType = "group"
+	} else {
+		if message.Params.GroupID != "" {
+			idInt64, err = ConvertToInt64(message.Params.GroupID)
+		} else if message.Params.UserID != "" {
+			idInt64, err = ConvertToInt64(message.Params.UserID)
 		}
-
-	} else if message.Params.UserID != "" {
-		idInt64, tempErr = ConvertToInt64(message.Params.UserID)
-		if tempErr != nil {
-			err = tempErr
-		}
-		idInt642, tempErr = ConvertToInt64(message.Params.GroupID)
-		if tempErr != nil {
-			err = tempErr
-		}
-
 	}
 
 	//设置递归 对直接向gsk发送action时有效果
@@ -172,7 +167,6 @@ func HandleSendMsg(client callapi.Client, api openapi.OpenAPI, apiv2 openapi.Ope
 		//重置递归类型
 		if echo.GetMapping(idInt64) <= 0 {
 			echo.AddMsgType(config.GetAppIDStr(), idInt64, "")
-			echo.AddMsgType(config.GetAppIDStr(), idInt642, "")
 		}
 		echo.AddMapping(idInt64, echo.GetMapping(idInt64)-1)
 
@@ -221,6 +215,28 @@ func GetMessageIDByUseridOrGroupid(appID string, userID interface{}) string {
 		mylog.Printf("GetMessageIDByUseridOrGroupid_key_2:%v", key)
 		messageid = echo.GetMsgIDByKey(key)
 	}
+	return messageid
+}
+
+// 通过user_id获取messageID
+func GetMessageIDByUseridOrGroupidSP(appID string, userID interface{}) string {
+	// 从appID和userID生成key
+	var userIDStr string
+	switch u := userID.(type) {
+	case int:
+		userIDStr = strconv.Itoa(u)
+	case int64:
+		userIDStr = strconv.FormatInt(u, 10)
+	case float64:
+		userIDStr = strconv.FormatFloat(u, 'f', 0, 64)
+	case string:
+		userIDStr = u
+	default:
+		// 可能需要处理其他类型或报错
+		return ""
+	}
+
+	messageid := echo.GetMsgIDv3(appID, userIDStr)
 	return messageid
 }
 
@@ -297,19 +313,19 @@ func GetMessageIDByUseridAndGroupid(appID string, userID interface{}, groupID in
 		//将真实id转为int userid64
 		groupid64, userid64, err = idmap.StoreIDv2Pro(GroupIDStr, userIDStr)
 		if err != nil {
-			mylog.Fatalf("Error storing ID 210: %v", err)
+			mylog.Errorf("Error storing ID 210: %v", err)
 		}
 	} else {
 		//将真实id转为int
 		userid64, err = idmap.StoreIDv2(userIDStr)
 		if err != nil {
-			mylog.Fatalf("Error storing ID 241: %v", err)
+			mylog.Errorf("Error storing ID 241: %v", err)
 			return ""
 		}
 		//将真实id转为int
 		groupid64, err = idmap.StoreIDv2(GroupIDStr)
 		if err != nil {
-			mylog.Fatalf("Error storing ID 256: %v", err)
+			mylog.Errorf("Error storing ID 256: %v", err)
 			return ""
 		}
 	}

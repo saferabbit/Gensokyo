@@ -50,6 +50,8 @@ _✨ 基于 [OneBot](https://github.com/howmanybots/onebot/blob/master/README.md
 ## 介绍
 gensokyo兼容 [OneBot-v11](https://github.com/botuniverse/onebot-11) ，并在其基础上做了一些扩展，详情请看 OneBot 的文档。
 
+Gensokyo文档(施工中):[起步](/docs/起步-注册QQ开放平台&启动gensokyo.md)
+
 可将官方的websocket和api转换至onebotv11标准,
 
 支持连接koishi,nonebot2,trss,zerobot,MiraiCQ,hoshino..
@@ -73,7 +75,7 @@ gensokyo兼容 [OneBot-v11](https://github.com/botuniverse/onebot-11) ，并在�
 ## 特别鸣谢
 
 - [`mnixry/nonebot-plugin-gocqhttp`](https://github.com/mnixry/nonebot-plugin-gocqhttp/): 本项目采用了mnixry编写的前端,并实现了与它对应的,基于qq官方api的后端api.
-- 感谢 Parker Liang 提供的技术指导和支持.
+- 特别鸣谢[`dk 盾`](https://www.dkdun.cn/),友情赞助服务器资源
 
 ### 接口
 

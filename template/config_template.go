@@ -18,6 +18,7 @@ settings:
   client_secret: "<YOUR_CLIENT_SECRET>"              # 你的客户端密钥
   shard_count: 1                    #分片数量 默认1
   shard_id: 0                       #当前分片id 默认从0开始,详细请看 https://bot.q.qq.com/wiki/develop/api/gateway/reference.html
+  shard_num: 1                      #接口调用超过频率限制时,如果不想要多开gsk,尝试调大.gsk会尝试连接到n个分片处理信息. n为你所配置的值.与 shard_count和shard_id互不相干.
 
   #事件订阅
   text_intent:                                       # 请根据公域 私域来选择intent,错误的intent将连接失败
@@ -42,7 +43,7 @@ settings:
   global_group_msg_rre_to_message : false            # 是否将用户开关机器人资料页的机器人推送开关 产生的事件转换为文本信息并发送给应用端.false将使用onebotv11的notice类型上报.
   global_group_msg_reject_message : "机器人主动消息被关闭"  # 当开启 global_group_msg_rre_to_message 时,机器人主动信息被关闭将上报的信息. 自行添加intent - GroupMsgRejectHandler
   global_group_msg_receive_message : "机器人主动消息被开启" # 建议设置为无规则复杂随机内容,避免用户指令内容碰撞. 自行添加 intent - GroupMsgReceiveHandler
-  hash_id : false                                    # 使用hash来进行idmaps转换,可以让user_id不是123开始的递增值
+  hash_id : true                                    # 使用hash来进行idmaps转换,可以让user_id不是123开始的递增值
   idmap_pro : false                                  # 需开启hash_id配合,高级id转换增强,可以多个真实值bind到同一个虚拟值,对于每个用户,每个群\私聊\判断私聊\频道,都会产生新的虚拟值,但可以多次bind,bind到同一个数字.数据库负担会变大.
 
   #Gensokyo互联类
@@ -52,6 +53,9 @@ settings:
   lotus: false                                       # lotus特性默认为false,当为true时,将会连接到另一个lotus为false的gensokyo。使用它提供的图床和idmaps服务(场景:同一个机器人在不同服务器运行,或内网需要发送base64图)。如果需要发送base64图片,需要设置正确的公网server_dir和开放对应的port, lotus鉴权 设置后,从gsk需要保持相同密码来访问主gsk
   lotus_password : "" 
   lotus_without_idmaps: false       #lotus只通过url,图片上传,语音,不通过id转换,在本地当前gsk维护idmaps转换.
+  lotus_without_uploadpic : false   #lotus只转换id,不进行图片上传.
+  lotus_grpc : false                #实验特性,使用grpc进行lotus连接.提高性能.
+  lotus_grpc_port : 50051           #grpc的端口,连接与被连接需保持一致.并且在防火墙放通此端口.
 
   #增强配置项                                           
   master_id : ["1","2"]             #群场景尚未开放获取管理员和列表能力,手动从日志中获取需要设置为管理,的user_id并填入(适用插件有权限判断场景)
@@ -86,6 +90,7 @@ settings:
   developer_log : false             #开启开发者日志 默认关闭
   log_level : 1                     # 0=debug 1=info 2=warning 3=error 默认1
   save_logs : false                 #自动储存日志
+  log_suffix_per_mins : 0           #默认0,代表不切分日志文件,设置60代表每60分钟储存一个日志文件,如果你的日志文件太大打不开,可以设置这个到合适的时间范围.
 
   #webui设置
   disable_webui: false              #禁用webui
@@ -134,6 +139,9 @@ settings:
   send_error : true                 #将报错用文本发出,避免机器人被审核报无响应
   save_error : false                #将保存保存在log文件夹,方便开发者定位发送错误.
   downtime_message : "我正在维护中~请不要担心,维护结束就回来~维护时间:(1小时)"
+  memory_msgid : false              #当你的机器人单日信息量超过100万,就需要高性能SSD或者开启这个选项了.部分依赖msgid的功能可能会受影响(如delete_msg)
+  threads_ret_msg : false           #异步,并发发送回执信息 仅ws可用.
+  no_ret_msg : false                #当你的信息量达到1000万/天的时候,并且你的业务不需要获取回调信息,此时直接屏蔽是最好的选择,可以提升50%收发性能. 需应用端适配!!!
 
   #增长营销类(推荐gensokyo-broadcast项目)
   self_introduce : ["",""]          #自我介绍,可设置多个随机发送,当不为空时,机器人被邀入群会发送自定义自我介绍 需手动添加新textintent   - "GroupAddRobotEventHandler"   - "GroupDelRobotEventHandler"
@@ -150,11 +158,15 @@ settings:
   transform_api_ids : true          #对get_group_menmber_list\get_group_member_info\get_group_list生效,是否在其中返回转换后的值(默认转换,不转换请自行处理插件逻辑,比如调用gsk的http api转换)
   auto_put_interaction : false      #自动回应按钮回调的/interactions/{interaction_id} 注本api需要邮件申请,详细方法参考群公告:196173384
   put_interaction_delay : 0         #单位毫秒 表示回应已收到回调类型的按钮的毫秒数 会按用户进行区分 非全局delay
+  put_interaction_except : []       #自动回复按钮的例外,当你想要自己用api回复,回复特殊状态时,将指令前缀填入进去(根据按钮的data字段判断的)
 
   #Onebot修改
   twoway_echo : false               #是否采用双向echo,根据机器人选择,獭獭\早苗 true 红色问答\椛椛 或者其他 请使用 false
-  array: false                                       # 连接trss云崽请开启array
+  array: false                      #连接trss云崽请开启array,是否以segment形式上报信息.
   native_ob11 : false               #如果你的机器人收到事件报错,请开启此选项增加兼容性
+  disable_error_chan : false        #禁用ws断开时候将信息放入补发频道,当信息非常多时可能导致冲垮应用端,可以设置本选项为true.
+  string_ob11 : false               #api不再返回转换后的int类型,而是直接转换,需应用端适配.
+  string_action : false             #开启后将兼容action调用中使用string形式的user_id和group_id.
 
   #URL相关
   visible_ip : false                #转换url时,如果server_dir是ip true将以ip形式发出url 默认隐藏url 将server_dir配置为自己域名可以转换url
@@ -184,6 +196,7 @@ settings:
   #错误临时修复类
   fix_11300: false                  #修复11300报错,需要在develop_bot_id填入自己机器人的appid. 11300原因暂时未知,临时修复方案.
   http_only_bot : false             #这个配置项会自动配置,请不要修改,保持false.
+  do_not_replace_appid : false      #在频道内机器人尝试at自己回at不到,保持false.群内机器人有发送用户头像url的需求时,true(因为用户头像url包含了appid,如果false就会出错.)
   
   #内置指令类
   bind_prefix : "/bind"             #需设置   #增强配置项  master_id 可触发

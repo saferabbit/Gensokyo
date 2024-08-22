@@ -21,6 +21,7 @@ type Settings struct {
 	ShardCount   int    `yaml:"shard_count"`
 	ShardID      int    `yaml:"shard_id"`
 	UseUin       bool   `yaml:"use_uin"`
+	ShardNum     int    `yaml:"shard_num"`
 	//事件订阅类
 	TextIntent []string `yaml:"text_intent"`
 	//转换类
@@ -34,12 +35,15 @@ type Settings struct {
 	HashID                                   bool   `yaml:"hash_id"`
 	IdmapPro                                 bool   `yaml:"idmap_pro"`
 	//gensokyo互联类
-	Server_dir         string `yaml:"server_dir"`
-	Port               string `yaml:"port"`
-	BackupPort         string `yaml:"backup_port"`
-	Lotus              bool   `yaml:"lotus"`
-	LotusPassword      string `yaml:"lotus_password"`
-	LotusWithoutIdmaps bool   `yaml:"lotus_without_idmaps"`
+	Server_dir            string `yaml:"server_dir"`
+	Port                  string `yaml:"port"`
+	BackupPort            string `yaml:"backup_port"`
+	Lotus                 bool   `yaml:"lotus"`
+	LotusPassword         string `yaml:"lotus_password"`
+	LotusWithoutIdmaps    bool   `yaml:"lotus_without_idmaps"`
+	LotusWithoutUploadPic bool   `yaml:"lotus_without_uploadpic"`
+	LotusGrpc             bool   `yaml:"lotus_grpc"`
+	LotusGrpcPort         int    `yaml:"lotus_grpc_port"`
 	//增强配置
 	MasterID         []string `yaml:"master_id"`
 	RecordSampleRate int      `yaml:"record_sampleRate"`
@@ -66,9 +70,10 @@ type Settings struct {
 	Crt            string  `yaml:"crt"`
 	Key            string  `yaml:"key"`
 	//日志类
-	DeveloperLog bool `yaml:"developer_log"`
-	LogLevel     int  `yaml:"log_level"`
-	SaveLogs     bool `yaml:"save_logs"`
+	DeveloperLog     bool `yaml:"developer_log"`
+	LogLevel         int  `yaml:"log_level"`
+	SaveLogs         bool `yaml:"save_logs"`
+	LogSuffixPerMins int  `yaml:"log_suffix_per_mins"`
 	//webui相关
 	DisableWebui bool   `yaml:"disable_webui"`
 	Username     string `yaml:"server_user_name"`
@@ -102,23 +107,30 @@ type Settings struct {
 	SendError       bool   `yaml:"send_error"`
 	SaveError       bool   `yaml:"save_error"`
 	DowntimeMessage string `yaml:"downtime_message"`
+	MemoryMsgid     bool   `yaml:"memory_msgid"`
+	ThreadsRetMsg   bool   `yaml:"threads_ret_msg"`
+	NoRetMsg        bool   `yaml:"no_ret_msg"`
 	//增长营销类
 	SelfIntroduce []string `yaml:"self_introduce"`
 	//api修改
-	GetGroupListAllGuilds    bool   `yaml:"get_g_list_all_guilds"`
-	GetGroupListGuilds       string `yaml:"get_g_list_guilds"`
-	GetGroupListReturnGuilds bool   `yaml:"get_g_list_return_guilds"`
-	GetGroupListGuidsType    int    `yaml:"get_g_list_guilds_type"`
-	GetGroupListDelay        int    `yaml:"get_g_list_delay"`
-	ForwardMsgLimit          int    `yaml:"forward_msg_limit"`
-	CustomBotName            string `yaml:"custom_bot_name"`
-	TransFormApiIds          bool   `yaml:"transform_api_ids"`
-	AutoPutInteraction       bool   `yaml:"auto_put_interaction"`
-	PutInteractionDelay      int    `yaml:"put_interaction_delay"`
+	GetGroupListAllGuilds    bool     `yaml:"get_g_list_all_guilds"`
+	GetGroupListGuilds       string   `yaml:"get_g_list_guilds"`
+	GetGroupListReturnGuilds bool     `yaml:"get_g_list_return_guilds"`
+	GetGroupListGuidsType    int      `yaml:"get_g_list_guilds_type"`
+	GetGroupListDelay        int      `yaml:"get_g_list_delay"`
+	ForwardMsgLimit          int      `yaml:"forward_msg_limit"`
+	CustomBotName            string   `yaml:"custom_bot_name"`
+	TransFormApiIds          bool     `yaml:"transform_api_ids"`
+	AutoPutInteraction       bool     `yaml:"auto_put_interaction"`
+	PutInteractionDelay      int      `yaml:"put_interaction_delay"`
+	PutInteractionExcept     []string `yaml:"put_interaction_except"`
 	//onebot修改
-	TwoWayEcho bool `yaml:"twoway_echo"`
-	Array      bool `yaml:"array"`
-	NativeOb11 bool `yaml:"native_ob11"`
+	TwoWayEcho       bool `yaml:"twoway_echo"`
+	Array            bool `yaml:"array"`
+	NativeOb11       bool `yaml:"native_ob11"`
+	DisableErrorChan bool `yaml:"disable_error_chan"`
+	StringOb11       bool `yaml:"string_ob11"`
+	StringAction     bool `yaml:"string_action"`
 	//url相关
 	VisibleIp    bool `yaml:"visible_ip"`
 	UrlToQrimage bool `yaml:"url_to_qrimage"`
@@ -141,8 +153,9 @@ type Settings struct {
 	EnableChangeWord  bool   `yaml:"enableChangeWord"`
 	DefaultChangeWord string `yaml:"defaultChangeWord"`
 	//错误临时修复类
-	Fix11300    bool `yaml:"fix_11300"`
-	HttpOnlyBot bool `yaml:"http_only_bot"`
+	Fix11300          bool `yaml:"fix_11300"`
+	HttpOnlyBot       bool `yaml:"http_only_bot"`
+	DoNotReplaceAppid bool `yaml:"do_not_replace_appid"`
 	//内置指令
 	BindPrefix   string   `yaml:"bind_prefix"`
 	MePrefix     string   `yaml:"me_prefix"`

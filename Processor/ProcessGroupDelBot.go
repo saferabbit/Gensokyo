@@ -20,7 +20,7 @@ func (p *Processors) ProcessGroupDelBot(data *dto.GroupAddBotEvent) error {
 	if config.GetIdmapPro() {
 		GroupID64, userid64, err = idmap.StoreIDv2Pro(data.GroupOpenID, data.OpMemberOpenID)
 		if err != nil {
-			mylog.Fatalf("Error storing ID: %v", err)
+			mylog.Errorf("Error storing ID: %v", err)
 		}
 	} else {
 		GroupID64, err = idmap.StoreIDv2(data.GroupOpenID)
@@ -69,6 +69,11 @@ func (p *Processors) ProcessGroupDelBot(data *dto.GroupAddBotEvent) error {
 		SubType:    "kick_me",
 		Time:       timestampInt64,
 		UserID:     userid64,
+	}
+	//增强配置
+	if !config.GetNativeOb11() {
+		Notice.RealUserID = data.OpMemberOpenID
+		Notice.RealGroupID = data.GroupOpenID
 	}
 	groupMsgMap := structToMap(Notice)
 	//上报信息到onebotv11应用端(正反ws)

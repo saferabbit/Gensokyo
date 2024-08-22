@@ -81,7 +81,7 @@ func SendResponse(client callapi.Client, err error, message *callapi.ActionMessa
 			//将真实id转为int userid64
 			GroupID64, _, errr = idmap.StoreIDv2Pro(message.Params.GroupID.(string), message.Params.UserID.(string))
 			if errr != nil {
-				mylog.Fatalf("Error storing ID: %v", err)
+				mylog.Errorf("Error storing ID: %v", err)
 			}
 		} else {
 			// 映射str的GroupID到int
@@ -98,7 +98,7 @@ func SendResponse(client callapi.Client, err error, message *callapi.ActionMessa
 			//将真实id转为int userid64
 			channelID64, _, errr = idmap.StoreIDv2Pro(message.Params.ChannelID.(string), message.Params.UserID.(string))
 			if errr != nil {
-				mylog.Fatalf("Error storing ID: %v", err)
+				mylog.Errorf("Error storing ID: %v", err)
 			}
 		} else {
 			// 映射str的GroupID到int
@@ -115,7 +115,7 @@ func SendResponse(client callapi.Client, err error, message *callapi.ActionMessa
 			//将真实id转为int userid64
 			guildID64, _, errr = idmap.StoreIDv2Pro(message.Params.GuildID.(string), message.Params.UserID.(string))
 			if errr != nil {
-				mylog.Fatalf("Error storing ID: %v", err)
+				mylog.Errorf("Error storing ID: %v", err)
 			}
 		} else {
 			// 映射str的GroupID到int
@@ -132,7 +132,7 @@ func SendResponse(client callapi.Client, err error, message *callapi.ActionMessa
 			//将真实id转为int userid64
 			userID64, _, errr = idmap.StoreIDv2Pro("group_private", message.Params.UserID.(string))
 			if errr != nil {
-				mylog.Fatalf("Error storing ID: %v", err)
+				mylog.Errorf("Error storing ID: %v", err)
 			}
 		} else {
 			// 映射str的GroupID到int
@@ -146,11 +146,20 @@ func SendResponse(client callapi.Client, err error, message *callapi.ActionMessa
 	// 设置响应值
 	response := ServerResponse{}
 	if resp != nil {
-		messageID64, mapErr = idmap.StoreCachev2(resp.Message.ID)
-		if mapErr != nil {
-			mylog.Printf("Error storing ID: %v", mapErr)
-			return "", nil
+		if config.GetMemoryMsgid() {
+			messageID64, mapErr = echo.StoreCacheInMemory(resp.Message.ID)
+			if mapErr != nil {
+				mylog.Printf("Error storing ID: %v", mapErr)
+				return "", nil
+			}
+		} else {
+			messageID64, mapErr = idmap.StoreCachev2(resp.Message.ID)
+			if mapErr != nil {
+				mylog.Printf("Error storing ID: %v", mapErr)
+				return "", nil
+			}
 		}
+
 		response.Data.MessageID = int(messageID64)
 		// 发送成功 增加今日发信息数
 		botstats.RecordMessageSent()
@@ -246,10 +255,18 @@ func SendGuildResponse(client callapi.Client, err error, message *callapi.Action
 	// 设置响应值
 	response := ServerResponse{}
 	if resp != nil {
-		messageID64, mapErr = idmap.StoreCachev2(resp.ID)
-		if mapErr != nil {
-			mylog.Printf("Error storing ID: %v", mapErr)
-			return "", nil
+		if config.GetMemoryMsgid() {
+			messageID64, mapErr = echo.StoreCacheInMemory(resp.ID)
+			if mapErr != nil {
+				mylog.Printf("Error storing ID: %v", mapErr)
+				return "", nil
+			}
+		} else {
+			messageID64, mapErr = idmap.StoreCachev2(resp.ID)
+			if mapErr != nil {
+				mylog.Printf("Error storing ID: %v", mapErr)
+				return "", nil
+			}
 		}
 		response.Data.MessageID = int(messageID64)
 		// 发送成功 增加今日发信息数
@@ -304,10 +321,18 @@ func SendC2CResponse(client callapi.Client, err error, message *callapi.ActionMe
 	// 设置响应值
 	response := ServerResponse{}
 	if resp != nil {
-		messageID64, mapErr = idmap.StoreCachev2(resp.Message.ID)
-		if mapErr != nil {
-			mylog.Printf("Error storing ID: %v", mapErr)
-			return "", nil
+		if config.GetMemoryMsgid() {
+			messageID64, mapErr = echo.StoreCacheInMemory(resp.Message.ID)
+			if mapErr != nil {
+				mylog.Printf("Error storing ID: %v", mapErr)
+				return "", nil
+			}
+		} else {
+			messageID64, mapErr = idmap.StoreCachev2(resp.Message.ID)
+			if mapErr != nil {
+				mylog.Printf("Error storing ID: %v", mapErr)
+				return "", nil
+			}
 		}
 		response.Data.MessageID = int(messageID64)
 		// 发送成功 增加今日发信息数
@@ -319,7 +344,7 @@ func SendC2CResponse(client callapi.Client, err error, message *callapi.ActionMe
 	//将真实id转为int userid64
 	userid64, errr := idmap.StoreIDv2(message.Params.UserID.(string))
 	if errr != nil {
-		mylog.Fatalf("Error storing ID: %v", err)
+		mylog.Errorf("Error storing ID: %v", err)
 	}
 	response.UserID = userid64
 	response.Echo = message.Echo
@@ -361,10 +386,18 @@ func SendGuildPrivateResponse(client callapi.Client, err error, message *callapi
 	// 设置响应值
 	response := ServerResponse{}
 	if resp != nil {
-		messageID64, mapErr = idmap.StoreCachev2(resp.ID)
-		if mapErr != nil {
-			mylog.Printf("Error storing ID: %v", mapErr)
-			return "", nil
+		if config.GetMemoryMsgid() {
+			messageID64, mapErr = echo.StoreCacheInMemory(resp.ID)
+			if mapErr != nil {
+				mylog.Printf("Error storing ID: %v", mapErr)
+				return "", nil
+			}
+		} else {
+			messageID64, mapErr = idmap.StoreCachev2(resp.ID)
+			if mapErr != nil {
+				mylog.Printf("Error storing ID: %v", mapErr)
+				return "", nil
+			}
 		}
 		response.Data.MessageID = int(messageID64)
 	} else {
@@ -408,6 +441,8 @@ func SendGuildPrivateResponse(client callapi.Client, err error, message *callapi
 func parseMessageContent(paramsMessage callapi.ParamsContent, message callapi.ActionMessage, client callapi.Client, api openapi.OpenAPI, apiv2 openapi.OpenAPI) (string, map[string][]string) {
 	messageText := ""
 
+	foundItems := make(map[string][]string)
+
 	switch message := paramsMessage.Message.(type) {
 	case string:
 		mylog.Printf("params.message is a string\n")
@@ -416,8 +451,14 @@ func parseMessageContent(paramsMessage callapi.ParamsContent, message callapi.Ac
 		if config.GetEnableChangeWord() {
 			messageText = acnode.CheckWordOUT(messageText)
 		}
+		if paramsMessage.GroupID == nil {
+			// 解析[CQ:avatar,qq=123456]
+			messageText = ProcessCQAvatarNoGroupID(messageText)
+		} else {
+			// 解析[CQ:avatar,qq=123456]
+			messageText = ProcessCQAvatar(paramsMessage.GroupID.(string), messageText)
+		}
 	case []interface{}:
-		//多个映射组成的切片
 		mylog.Printf("params.message is a slice (segment_type_koishi)\n")
 		for _, segment := range message {
 			segmentMap, ok := segment.(map[string]interface{})
@@ -434,114 +475,130 @@ func parseMessageContent(paramsMessage callapi.ParamsContent, message callapi.Ac
 			switch segmentType {
 			case "text":
 				segmentContent, _ = segmentMap["data"].(map[string]interface{})["text"].(string)
-				// 应用替换规则
 				if config.GetEnableChangeWord() {
 					segmentContent = acnode.CheckWordOUT(segmentContent)
 				}
 			case "image":
 				fileContent, _ := segmentMap["data"].(map[string]interface{})["file"].(string)
-				segmentContent = "[CQ:image,file=" + fileContent + "]"
-			case "voice":
+				foundItems["image"] = append(foundItems["image"], fileContent)
+
+			case "voice", "record":
 				fileContent, _ := segmentMap["data"].(map[string]interface{})["file"].(string)
-				segmentContent = "[CQ:record,file=" + fileContent + "]"
-			case "record":
-				fileContent, _ := segmentMap["data"].(map[string]interface{})["file"].(string)
-				segmentContent = "[CQ:record,file=" + fileContent + "]"
+				foundItems["record"] = append(foundItems["record"], fileContent)
+
 			case "at":
 				qqNumber, _ := segmentMap["data"].(map[string]interface{})["qq"].(string)
-				segmentContent = "[CQ:at,qq=" + qqNumber + "]"
+				foundItems["at"] = append(foundItems["at"], qqNumber)
+
+			case "avatar":
+				qqNumber, _ := segmentMap["data"].(map[string]interface{})["qq"].(string)
+				var avatarCQCode string
+				if paramsMessage.GroupID == nil {
+					avatarCQCode, _ = GetAvatarCQCodeNoGroupID(qqNumber)
+				} else {
+					avatarCQCode, _ = GetAvatarCQCode(paramsMessage.GroupID.(string), qqNumber)
+				}
+				foundItems["avatar"] = append(foundItems["avatar"], avatarCQCode)
+
 			case "markdown":
 				mdContent, ok := segmentMap["data"].(map[string]interface{})["data"]
 				if ok {
+					var mdContentEncoded string
 					if mdContentMap, isMap := mdContent.(map[string]interface{}); isMap {
-						// mdContent是map[string]interface{}，按map处理
 						mdContentBytes, err := json.Marshal(mdContentMap)
 						if err != nil {
 							mylog.Printf("Error marshaling mdContentMap to JSON:%v", err)
+							continue
 						}
-						encoded := base64.StdEncoding.EncodeToString(mdContentBytes)
-						segmentContent = "[CQ:markdown,data=base64://" + encoded + "]"
+						mdContentEncoded = base64.StdEncoding.EncodeToString(mdContentBytes)
 					} else if mdContentStr, isString := mdContent.(string); isString {
-						// mdContent是string
 						if strings.HasPrefix(mdContentStr, "base64://") {
-							// 如果以base64://开头，直接使用
-							segmentContent = "[CQ:markdown,data=" + mdContentStr + "]"
+							mdContentEncoded = mdContentStr
 						} else {
-							// 处理实体化后的JSON文本
 							mdContentStr = strings.ReplaceAll(mdContentStr, "&amp;", "&")
 							mdContentStr = strings.ReplaceAll(mdContentStr, "&#91;", "[")
 							mdContentStr = strings.ReplaceAll(mdContentStr, "&#93;", "]")
 							mdContentStr = strings.ReplaceAll(mdContentStr, "&#44;", ",")
 
-							// 将处理过的字符串视为JSON对象，进行序列化和编码
 							var jsonMap map[string]interface{}
 							if err := json.Unmarshal([]byte(mdContentStr), &jsonMap); err != nil {
 								mylog.Printf("Error unmarshaling string to JSON:%v", err)
+								continue
 							}
 							mdContentBytes, err := json.Marshal(jsonMap)
 							if err != nil {
 								mylog.Printf("Error marshaling jsonMap to JSON:%v", err)
+								continue
 							}
-							encoded := base64.StdEncoding.EncodeToString(mdContentBytes)
-							segmentContent = "[CQ:markdown,data=base64://" + encoded + "]"
+							mdContentEncoded = base64.StdEncoding.EncodeToString(mdContentBytes)
 						}
 					} else {
 						mylog.Printf("Error marshaling markdown segment wrong type.")
+						continue
 					}
+					foundItems["markdown"] = append(foundItems["markdown"], mdContentEncoded)
 				} else {
-					mylog.Printf("Error marshaling markdown segment to interface,contain type but data is nil.")
+					mylog.Printf("Error: markdown segment data is nil.")
 				}
+
+			default:
+				mylog.Printf("Unhandled segment type: %s", segmentType)
 			}
 
 			messageText += segmentContent
+
 		}
 	case map[string]interface{}:
-		//单个映射
 		mylog.Printf("params.message is a map (segment_type_trss)\n")
 		messageType, _ := message["type"].(string)
+
 		switch messageType {
 		case "text":
 			messageText, _ = message["data"].(map[string]interface{})["text"].(string)
-			// 应用替换规则
 			if config.GetEnableChangeWord() {
 				messageText = acnode.CheckWordOUT(messageText)
 			}
+
 		case "image":
 			fileContent, _ := message["data"].(map[string]interface{})["file"].(string)
-			messageText = "[CQ:image,file=" + fileContent + "]"
-		case "voice":
+			foundItems["image"] = append(foundItems["image"], fileContent)
+
+		case "voice", "record":
 			fileContent, _ := message["data"].(map[string]interface{})["file"].(string)
-			messageText = "[CQ:record,file=" + fileContent + "]"
-		case "record":
-			fileContent, _ := message["data"].(map[string]interface{})["file"].(string)
-			messageText = "[CQ:record,file=" + fileContent + "]"
+			foundItems["record"] = append(foundItems["record"], fileContent)
+
 		case "at":
 			qqNumber, _ := message["data"].(map[string]interface{})["qq"].(string)
-			messageText = "[CQ:at,qq=" + qqNumber + "]"
+			foundItems["at"] = append(foundItems["at"], qqNumber)
+
+		case "avatar":
+			qqNumber, _ := message["data"].(map[string]interface{})["qq"].(string)
+			var avatarCQCode string
+			if paramsMessage.GroupID == nil {
+				avatarCQCode, _ = GetAvatarCQCodeNoGroupID(qqNumber)
+			} else {
+				avatarCQCode, _ = GetAvatarCQCode(paramsMessage.GroupID.(string), qqNumber)
+			}
+			foundItems["avatar"] = append(foundItems["avatar"], avatarCQCode)
+
 		case "markdown":
 			mdContent, ok := message["data"].(map[string]interface{})["data"]
 			if ok {
+				var mdContentEncoded string
 				if mdContentMap, isMap := mdContent.(map[string]interface{}); isMap {
-					// mdContent是map[string]interface{}，按map处理
 					mdContentBytes, err := json.Marshal(mdContentMap)
 					if err != nil {
 						mylog.Printf("Error marshaling mdContentMap to JSON:%v", err)
 					}
-					encoded := base64.StdEncoding.EncodeToString(mdContentBytes)
-					messageText = "[CQ:markdown,data=base64://" + encoded + "]"
+					mdContentEncoded = base64.StdEncoding.EncodeToString(mdContentBytes)
 				} else if mdContentStr, isString := mdContent.(string); isString {
-					// mdContent是string
 					if strings.HasPrefix(mdContentStr, "base64://") {
-						// 如果以base64://开头，直接使用
-						messageText = "[CQ:markdown,data=" + mdContentStr + "]"
+						mdContentEncoded = mdContentStr
 					} else {
-						// 处理实体化后的JSON文本
 						mdContentStr = strings.ReplaceAll(mdContentStr, "&amp;", "&")
 						mdContentStr = strings.ReplaceAll(mdContentStr, "&#91;", "[")
 						mdContentStr = strings.ReplaceAll(mdContentStr, "&#93;", "]")
 						mdContentStr = strings.ReplaceAll(mdContentStr, "&#44;", ",")
-
-						// 将处理过的字符串视为JSON对象，进行序列化和编码
 						var jsonMap map[string]interface{}
 						if err := json.Unmarshal([]byte(mdContentStr), &jsonMap); err != nil {
 							mylog.Printf("Error unmarshaling string to JSON:%v", err)
@@ -550,77 +607,88 @@ func parseMessageContent(paramsMessage callapi.ParamsContent, message callapi.Ac
 						if err != nil {
 							mylog.Printf("Error marshaling jsonMap to JSON:%v", err)
 						}
-						encoded := base64.StdEncoding.EncodeToString(mdContentBytes)
-						messageText = "[CQ:markdown,data=base64://" + encoded + "]"
+						mdContentEncoded = base64.StdEncoding.EncodeToString(mdContentBytes)
 					}
 				} else {
-					mylog.Printf("Error marshaling mdContent wrong type.")
+					mylog.Printf("Error: markdown content has an unexpected type.")
 				}
+				foundItems["markdown"] = append(foundItems["markdown"], mdContentEncoded)
 			} else {
-				mylog.Printf("Error marshaling markdown segment to interface,contain type but data is nil.")
+				mylog.Printf("Error: markdown segment data is nil.")
 			}
+
+		default:
+			mylog.Printf("Unhandled message type: %s", messageType)
 		}
+
 	default:
 		mylog.Println("Unsupported message format: params.message field is not a string, map or slice")
 	}
-	//处理at
-	messageText = transformMessageTextAt(messageText)
 
-	//mylog.Printf(messageText)
-
-	// 正则表达式部分
-	var localImagePattern *regexp.Regexp
-	var localRecordPattern *regexp.Regexp
-	if runtime.GOOS == "windows" {
-		localImagePattern = regexp.MustCompile(`\[CQ:image,file=file:///([^\]]+?)\]`)
+	if paramsMessage.GroupID == nil {
+		//处理at
+		messageText = transformMessageTextAtNoGroupID(messageText)
 	} else {
-		localImagePattern = regexp.MustCompile(`\[CQ:image,file=file://([^\]]+?)\]`)
-	}
-	if runtime.GOOS == "windows" {
-		localRecordPattern = regexp.MustCompile(`\[CQ:record,file=file:///([^\]]+?)\]`)
-	} else {
-		localRecordPattern = regexp.MustCompile(`\[CQ:record,file=file://([^\]]+?)\]`)
-	}
-	httpUrlImagePattern := regexp.MustCompile(`\[CQ:image,file=http://(.+?)\]`)
-	httpsUrlImagePattern := regexp.MustCompile(`\[CQ:image,file=https://(.+?)\]`)
-	base64ImagePattern := regexp.MustCompile(`\[CQ:image,file=base64://(.+?)\]`)
-	base64RecordPattern := regexp.MustCompile(`\[CQ:record,file=base64://(.+?)\]`)
-	httpUrlRecordPattern := regexp.MustCompile(`\[CQ:record,file=http://(.+?)\]`)
-	httpsUrlRecordPattern := regexp.MustCompile(`\[CQ:record,file=https://(.+?)\]`)
-	httpUrlVideoPattern := regexp.MustCompile(`\[CQ:video,file=http://(.+?)\]`)
-	httpsUrlVideoPattern := regexp.MustCompile(`\[CQ:video,file=https://(.+?)\]`)
-	mdPattern := regexp.MustCompile(`\[CQ:markdown,data=base64://(.+?)\]`)
-	qqMusicPattern := regexp.MustCompile(`\[CQ:music,type=qq,id=(\d+)\]`)
-
-	patterns := []struct {
-		key     string
-		pattern *regexp.Regexp
-	}{
-		{"local_image", localImagePattern},
-		{"url_image", httpUrlImagePattern},
-		{"url_images", httpsUrlImagePattern},
-		{"base64_image", base64ImagePattern},
-		{"base64_record", base64RecordPattern},
-		{"local_record", localRecordPattern},
-		{"url_record", httpUrlRecordPattern},
-		{"url_records", httpsUrlRecordPattern},
-		{"markdown", mdPattern},
-		{"qqmusic", qqMusicPattern},
-		{"url_video", httpUrlVideoPattern},
-		{"url_videos", httpsUrlVideoPattern},
+		//处理at
+		messageText = transformMessageTextAt(messageText, paramsMessage.GroupID.(string))
 	}
 
-	foundItems := make(map[string][]string)
-	for _, pattern := range patterns {
-		matches := pattern.pattern.FindAllStringSubmatch(messageText, -1)
-		for _, match := range matches {
-			if len(match) > 1 {
-				foundItems[pattern.key] = append(foundItems[pattern.key], match[1])
-			}
+	// 当匹配到复古cq码上报类型,使用低效率正则.
+	if _, ok := paramsMessage.Message.(string); ok {
+		// 正则表达式部分
+		var localImagePattern *regexp.Regexp
+		var localRecordPattern *regexp.Regexp
+		if runtime.GOOS == "windows" {
+			localImagePattern = regexp.MustCompile(`\[CQ:image,file=file:///([^\]]+?)\]`)
+		} else {
+			localImagePattern = regexp.MustCompile(`\[CQ:image,file=file://([^\]]+?)\]`)
 		}
-		// 移动替换操作到这里，确保所有匹配都被处理后再进行替换
-		messageText = pattern.pattern.ReplaceAllString(messageText, "")
+		if runtime.GOOS == "windows" {
+			localRecordPattern = regexp.MustCompile(`\[CQ:record,file=file:///([^\]]+?)\]`)
+		} else {
+			localRecordPattern = regexp.MustCompile(`\[CQ:record,file=file://([^\]]+?)\]`)
+		}
+		httpUrlImagePattern := regexp.MustCompile(`\[CQ:image,file=http://(.+?)\]`)
+		httpsUrlImagePattern := regexp.MustCompile(`\[CQ:image,file=https://(.+?)\]`)
+		base64ImagePattern := regexp.MustCompile(`\[CQ:image,file=base64://(.+?)\]`)
+		base64RecordPattern := regexp.MustCompile(`\[CQ:record,file=base64://(.+?)\]`)
+		httpUrlRecordPattern := regexp.MustCompile(`\[CQ:record,file=http://(.+?)\]`)
+		httpsUrlRecordPattern := regexp.MustCompile(`\[CQ:record,file=https://(.+?)\]`)
+		httpUrlVideoPattern := regexp.MustCompile(`\[CQ:video,file=http://(.+?)\]`)
+		httpsUrlVideoPattern := regexp.MustCompile(`\[CQ:video,file=https://(.+?)\]`)
+		mdPattern := regexp.MustCompile(`\[CQ:markdown,data=base64://(.+?)\]`)
+		qqMusicPattern := regexp.MustCompile(`\[CQ:music,type=qq,id=(\d+)\]`)
+
+		patterns := []struct {
+			key     string
+			pattern *regexp.Regexp
+		}{
+			{"local_image", localImagePattern},
+			{"url_image", httpUrlImagePattern},
+			{"url_images", httpsUrlImagePattern},
+			{"base64_image", base64ImagePattern},
+			{"base64_record", base64RecordPattern},
+			{"local_record", localRecordPattern},
+			{"url_record", httpUrlRecordPattern},
+			{"url_records", httpsUrlRecordPattern},
+			{"markdown", mdPattern},
+			{"qqmusic", qqMusicPattern},
+			{"url_video", httpUrlVideoPattern},
+			{"url_videos", httpsUrlVideoPattern},
+		}
+
+		for _, pattern := range patterns {
+			matches := pattern.pattern.FindAllStringSubmatch(messageText, -1)
+			for _, match := range matches {
+				if len(match) > 1 {
+					foundItems[pattern.key] = append(foundItems[pattern.key], match[1])
+				}
+			}
+			// 移动替换操作到这里，确保所有匹配都被处理后再进行替换
+			messageText = pattern.pattern.ReplaceAllString(messageText, "")
+		}
 	}
+
 	//最后再处理Url
 	messageText = transformMessageTextUrl(messageText, message, client, api, apiv2)
 
@@ -635,9 +703,12 @@ func isIPAddress(address string) bool {
 }
 
 // at处理
-func transformMessageTextAt(messageText string) string {
-	// 首先，将AppID替换为BotID
-	messageText = strings.ReplaceAll(messageText, AppID, BotID)
+func transformMessageTextAt(messageText string, groupid string) string {
+	// DoNotReplaceAppid=false(默认频道bot,需要自己at自己时,否则改成true)
+	if !config.GetDoNotReplaceAppid() {
+		// 首先，将AppID替换为BotID
+		messageText = strings.ReplaceAll(messageText, AppID, BotID)
+	}
 
 	// 去除所有[CQ:reply,id=数字] todo 更好的处理办法
 	replyRE := regexp.MustCompile(`\[CQ:reply,id=\d+\]`)
@@ -648,7 +719,56 @@ func transformMessageTextAt(messageText string) string {
 	messageText = re.ReplaceAllStringFunc(messageText, func(m string) string {
 		submatches := re.FindStringSubmatch(m)
 		if len(submatches) > 1 {
-			realUserID, err := idmap.RetrieveRowByIDv2(submatches[1])
+			var realUserID string
+			var err error
+			if config.GetIdmapPro() {
+				_, realUserID, err = idmap.RetrieveRowByIDv2Pro(groupid, submatches[1])
+			} else {
+				realUserID, err = idmap.RetrieveRowByIDv2(submatches[1])
+			}
+			if err != nil {
+				// 如果出错，也替换成相应的格式，但使用原始QQ号
+				mylog.Printf("Error retrieving user ID: %v", err)
+				return "<@!" + submatches[1] + ">"
+			}
+
+			// 在这里检查 GetRemoveBotAtGroup 和 realUserID 的长度
+			if config.GetRemoveBotAtGroup() && len(realUserID) == 32 {
+				return ""
+			}
+
+			return "<@!" + realUserID + ">"
+		}
+		return m
+	})
+	return messageText
+}
+
+// at处理
+func transformMessageTextAtNoGroupID(messageText string) string {
+	// DoNotReplaceAppid=false(默认频道bot,需要自己at自己时,否则改成true)
+	if !config.GetDoNotReplaceAppid() {
+		// 首先，将AppID替换为BotID
+		messageText = strings.ReplaceAll(messageText, AppID, BotID)
+	}
+
+	// 去除所有[CQ:reply,id=数字] todo 更好的处理办法
+	replyRE := regexp.MustCompile(`\[CQ:reply,id=\d+\]`)
+	messageText = replyRE.ReplaceAllString(messageText, "")
+
+	// 使用正则表达式来查找所有[CQ:at,qq=数字]的模式
+	re := regexp.MustCompile(`\[CQ:at,qq=(\d+)\]`)
+	messageText = re.ReplaceAllStringFunc(messageText, func(m string) string {
+		submatches := re.FindStringSubmatch(m)
+		if len(submatches) > 1 {
+			var realUserID string
+			var err error
+			if config.GetIdmapPro() {
+				// 这是个魔法数 代表私聊
+				_, realUserID, err = idmap.RetrieveRowByIDv2Pro("690426430", submatches[1])
+			} else {
+				realUserID, err = idmap.RetrieveRowByIDv2(submatches[1])
+			}
 			if err != nil {
 				// 如果出错，也替换成相应的格式，但使用原始QQ号
 				mylog.Printf("Error retrieving user ID: %v", err)
@@ -754,11 +874,23 @@ func RevertTransformedText(data interface{}, msgtype string, api openapi.OpenAPI
 		messageText = " "
 	}
 
+	//一个斜杠后跟一个空格的,用户也不希望去掉
+	if msg.Content == "/ " {
+		menumsg = true
+		messageText = " "
+	}
+
+	//一个空格一个斜杠后跟一个空格的,用户也不希望去掉
+	if msg.Content == " / " {
+		menumsg = true
+		messageText = " "
+	}
+
 	if !menumsg {
 		//处理前 先去前后空
 		messageText = strings.TrimSpace(msg.Content)
 	}
-	var originmessageText = messageText
+
 	//mylog.Printf("1[%v]", messageText)
 
 	// 将messageText里的BotID替换成AppID
@@ -802,6 +934,8 @@ func RevertTransformedText(data interface{}, msgtype string, api openapi.OpenAPI
 			messageText = strings.TrimSpace(messageText)
 		}
 	}
+
+	var originmessageText = messageText
 	//mylog.Printf("2[%v]", messageText)
 
 	// 检查是否需要移除前缀
@@ -975,41 +1109,44 @@ func RevertTransformedText(data interface{}, msgtype string, api openapi.OpenAPI
 				}
 			}
 
-			//如果二级指令白名单全部是*(忽略自身,那么不判断二级白名单是否匹配)
-			if allStarPrefixed {
-				if len(messageText) == len(matchedPrefix.Prefix) {
+			// 调用 GetVisualPrefixsBypass 获取前缀数组
+			visualPrefixes := config.GetVisualPrefixsBypass()
+			// 判断 messageText 是否以数组中的任一前缀开头
+			for _, prefix := range visualPrefixes {
+				if strings.HasPrefix(originmessageText, prefix) {
 					matched = true
+					break
+				}
+			}
+
+			if !matched {
+				//如果二级指令白名单全部是*(忽略自身,那么不判断二级白名单是否匹配)
+				if allStarPrefixed {
+					if len(messageText) == len(matchedPrefix.Prefix) {
+						matched = true
+					} else {
+						matched = false
+					}
 				} else {
-					matched = false
-					// 调用 GetVisualPrefixsBypass 获取前缀数组
-					visualPrefixes := config.GetVisualPrefixsBypass()
-					// 判断 messageText 是否以数组中的任一前缀开头
-					for _, prefix := range visualPrefixes {
-						if strings.HasPrefix(originmessageText, prefix) {
+					// 遍历白名单数组，检查是否有匹配项
+					for _, prefix := range allPrefixes {
+						trimmedPrefix := prefix
+						if strings.HasPrefix(prefix, "*") {
+							// 如果前缀以 * 开头，则移除 *
+							trimmedPrefix = strings.TrimPrefix(prefix, "*")
+						} else if strings.HasPrefix(prefix, "&") {
+							// 如果前缀以 & 开头，则移除 & 并从 trimmedPrefix 前端去除 matchedPrefix.Prefix
+							trimmedPrefix = strings.TrimPrefix(prefix, "&")
+							trimmedPrefix = strings.TrimPrefix(trimmedPrefix, matchedPrefix.Prefix)
+						}
+
+						// 从trimmedPrefix中去除前后空格
+						trimmedPrefix = strings.TrimSpace(trimmedPrefix)
+						// trimmedPrefix如果是""就会导致任意内容都是true,所以不能是""
+						if strings.HasPrefix(messageText, trimmedPrefix) && trimmedPrefix != "" {
 							matched = true
 							break
 						}
-					}
-				}
-			} else {
-				// 遍历白名单数组，检查是否有匹配项
-				for _, prefix := range allPrefixes {
-					trimmedPrefix := prefix
-					if strings.HasPrefix(prefix, "*") {
-						// 如果前缀以 * 开头，则移除 *
-						trimmedPrefix = strings.TrimPrefix(prefix, "*")
-					} else if strings.HasPrefix(prefix, "&") {
-						// 如果前缀以 & 开头，则移除 & 并从 trimmedPrefix 前端去除 matchedPrefix.Prefix
-						trimmedPrefix = strings.TrimPrefix(prefix, "&")
-						trimmedPrefix = strings.TrimPrefix(trimmedPrefix, matchedPrefix.Prefix)
-					}
-
-					// 从trimmedPrefix中去除前后空格(可能会有bug)
-					trimmedPrefix = strings.TrimSpace(trimmedPrefix)
-					// trimmedPrefix如果是""就会导致任意内容都是true,所以不能是""
-					if strings.HasPrefix(messageText, trimmedPrefix) && trimmedPrefix != "" {
-						matched = true
-						break
 					}
 				}
 			}

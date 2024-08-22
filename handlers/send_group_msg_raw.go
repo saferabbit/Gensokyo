@@ -56,33 +56,47 @@ func HandleSendGroupMsgRaw(client callapi.Client, api openapi.OpenAPI, apiv2 ope
 		}
 	}
 
-	if msgType == "" && message.Params.GroupID != nil && checkZeroGroupID(message.Params.GroupID) {
-		msgType = GetMessageTypeByGroupid(config.GetAppIDStr(), message.Params.GroupID)
+	if message.Params.GroupID != nil && len(message.Params.GroupID.(string)) != 32 {
+		if msgType == "" && message.Params.GroupID != nil && checkZeroGroupID(message.Params.GroupID) {
+			msgType = GetMessageTypeByGroupid(config.GetAppIDStr(), message.Params.GroupID)
+		}
+		if msgType == "" && message.Params.UserID != nil && checkZeroUserID(message.Params.UserID) {
+			msgType = GetMessageTypeByUserid(config.GetAppIDStr(), message.Params.UserID)
+		}
+		if msgType == "" && message.Params.GroupID != nil && checkZeroGroupID(message.Params.GroupID) {
+			msgType = GetMessageTypeByGroupidV2(message.Params.GroupID)
+		}
+		if msgType == "" && message.Params.UserID != nil && checkZeroUserID(message.Params.UserID) {
+			msgType = GetMessageTypeByUseridV2(message.Params.UserID)
+		}
 	}
-	if msgType == "" && message.Params.UserID != nil && checkZeroUserID(message.Params.UserID) {
-		msgType = GetMessageTypeByUserid(config.GetAppIDStr(), message.Params.UserID)
-	}
-	if msgType == "" && message.Params.GroupID != nil && checkZeroGroupID(message.Params.GroupID) {
-		msgType = GetMessageTypeByGroupidV2(message.Params.GroupID)
-	}
-	if msgType == "" && message.Params.UserID != nil && checkZeroUserID(message.Params.UserID) {
-		msgType = GetMessageTypeByUseridV2(message.Params.UserID)
-	}
+
 	// New checks for UserID and GroupID being nil or 0
 	if (message.Params.UserID == nil || !checkZeroUserID(message.Params.UserID)) &&
 		(message.Params.GroupID == nil || !checkZeroGroupID(message.Params.GroupID)) {
 		mylog.Printf("send_group_msgs接收到错误action: %v", message)
 		return "", nil
 	}
+
 	mylog.Printf("send_group_msg获取到信息类型:%v", msgType)
 	var idInt64 int64
 	var err error
 	var retmsg string
 
-	if message.Params.GroupID != "" {
-		idInt64, err = ConvertToInt64(message.Params.GroupID)
-	} else if message.Params.UserID != "" {
-		idInt64, err = ConvertToInt64(message.Params.UserID)
+	if len(message.Params.GroupID.(string)) == 32 {
+		idInt64, err = idmap.GenerateRowID(message.Params.GroupID.(string), 9)
+		// 临时的
+		msgType = "group"
+	} else if message.Params.UserID != nil && len(message.Params.UserID.(string)) == 32 {
+		idInt64, err = idmap.GenerateRowID(message.Params.UserID.(string), 9)
+		// 临时的
+		msgType = "group_private"
+	} else {
+		if message.Params.GroupID != "" {
+			idInt64, err = ConvertToInt64(message.Params.GroupID)
+		} else if message.Params.UserID != "" {
+			idInt64, err = ConvertToInt64(message.Params.UserID)
+		}
 	}
 
 	//设置递归 对直接向gsk发送action时有效果
@@ -109,47 +123,49 @@ func HandleSendGroupMsgRaw(client callapi.Client, api openapi.OpenAPI, apiv2 ope
 		var SSM bool
 
 		var originalGroupID, originalUserID string
-		// 检查UserID是否为nil
-		if message.Params.UserID != nil && config.GetIdmapPro() && message.Params.UserID.(string) != "" && message.Params.UserID.(string) != "0" {
-			// 如果UserID不是nil且配置为使用Pro版本，则调用RetrieveRowByIDv2Pro
-			originalGroupID, originalUserID, err = idmap.RetrieveRowByIDv2Pro(message.Params.GroupID.(string), message.Params.UserID.(string))
-			if err != nil {
-				mylog.Printf("Error1 retrieving original GroupID: %v", err)
-			}
-			mylog.Printf("测试,通过idmaps-pro获取的originalGroupID:%v", originalGroupID)
-			if originalGroupID == "" {
+		if len(message.Params.GroupID.(string)) != 32 {
+			// 检查UserID是否为nil
+			if message.Params.UserID != nil && config.GetIdmapPro() && message.Params.UserID.(string) != "" && message.Params.UserID.(string) != "0" {
+				// 如果UserID不是nil且配置为使用Pro版本，则调用RetrieveRowByIDv2Pro
+				originalGroupID, originalUserID, err = idmap.RetrieveRowByIDv2Pro(message.Params.GroupID.(string), message.Params.UserID.(string))
+				if err != nil {
+					mylog.Printf("Error1 retrieving original GroupID: %v", err)
+				}
+				mylog.Printf("测试,通过idmaps-pro获取的originalGroupID:%v", originalGroupID)
+				if originalGroupID == "" {
+					originalGroupID, err = idmap.RetrieveRowByIDv2(message.Params.GroupID.(string))
+					if err != nil {
+						mylog.Printf("Error2 retrieving original GroupID: %v", err)
+						return "", nil
+					}
+					mylog.Printf("测试,通过idmaps获取的originalGroupID:%v", originalGroupID)
+				}
+			} else {
+				// 如果UserID是nil或配置不使用Pro版本，则调用RetrieveRowByIDv2
 				originalGroupID, err = idmap.RetrieveRowByIDv2(message.Params.GroupID.(string))
 				if err != nil {
-					mylog.Printf("Error2 retrieving original GroupID: %v", err)
-					return "", nil
+					mylog.Printf("Error retrieving original GroupID: %v", err)
 				}
-				mylog.Printf("测试,通过idmaps获取的originalGroupID:%v", originalGroupID)
-			}
-		} else {
-			// 如果UserID是nil或配置不使用Pro版本，则调用RetrieveRowByIDv2
-			originalGroupID, err = idmap.RetrieveRowByIDv2(message.Params.GroupID.(string))
-			if err != nil {
-				mylog.Printf("Error retrieving original GroupID: %v", err)
-			}
-			// 检查 message.Params.UserID 是否为 nil
-			if message.Params.UserID == nil {
-				//mylog.Println("UserID is nil")
-			} else {
-				// 进行类型断言，确认 UserID 不是 nil
-				userID, ok := message.Params.UserID.(string)
-				if !ok {
-					mylog.Println("UserID is not a string")
-					// 处理类型断言失败的情况
+				// 检查 message.Params.UserID 是否为 nil
+				if message.Params.UserID == nil {
+					//mylog.Println("UserID is nil")
 				} else {
-					originalUserID, err = idmap.RetrieveRowByIDv2(userID)
-					if err != nil {
-						mylog.Printf("Error retrieving original UserID: %v", err)
+					// 进行类型断言，确认 UserID 不是 nil
+					userID, ok := message.Params.UserID.(string)
+					if !ok {
+						mylog.Println("UserID is not a string")
+						// 处理类型断言失败的情况
+					} else {
+						originalUserID, err = idmap.RetrieveRowByIDv2(userID)
+						if err != nil {
+							mylog.Printf("Error retrieving original UserID: %v", err)
+						}
 					}
 				}
 			}
+			message.Params.GroupID = originalGroupID
+			message.Params.UserID = originalUserID
 		}
-		message.Params.GroupID = originalGroupID
-		message.Params.UserID = originalUserID
 
 		// 检查字符串是否仅包含数字
 		isNumeric := func(s string) bool {
@@ -160,7 +176,15 @@ func HandleSendGroupMsgRaw(client callapi.Client, api openapi.OpenAPI, apiv2 ope
 
 		if isNumeric(messageID) && messageID != "0" {
 			// 当messageID是字符串形式的数字时，执行转换
-			RealMsgID, err := idmap.RetrieveRowByCachev2(messageID)
+			var RealMsgID string
+			var err error
+			if config.GetMemoryMsgid() {
+				//从内存取
+				RealMsgID, _ = echo.GetCacheIDFromMemoryByRowID(messageID)
+			} else {
+				RealMsgID, err = idmap.RetrieveRowByCachev2(messageID)
+			}
+
 			if err != nil {
 				mylog.Printf("error retrieving real MessageID: %v", err)
 			} else {
@@ -273,8 +297,15 @@ func HandleSendGroupMsgRaw(client callapi.Client, api openapi.OpenAPI, apiv2 ope
 				echo.PushGlobalStack(pair)
 			}
 
-			// 发送成功回执
-			retmsg, _ = SendResponse(client, err, &message, resp, api, apiv2)
+			if !config.GetNoRetMsg() {
+				// 发送成功回执
+				if config.GetThreadsRetMsg() {
+					go SendResponse(client, err, &message, resp, api, apiv2)
+				} else {
+					retmsg, _ = SendResponse(client, err, &message, resp, api, apiv2)
+				}
+
+			}
 
 			delete(foundItems, imageType) // 从foundItems中删除已处理的图片项
 			messageText = ""
@@ -306,8 +337,16 @@ func HandleSendGroupMsgRaw(client callapi.Client, api openapi.OpenAPI, apiv2 ope
 				pair.GroupMessage = groupMessage
 				echo.PushGlobalStack(pair)
 			}
-			//发送成功回执
-			retmsg, _ = SendResponse(client, err, &message, resp, api, apiv2)
+
+			if !config.GetNoRetMsg() {
+				//发送成功回执
+				if config.GetThreadsRetMsg() {
+					go SendResponse(client, err, &message, resp, api, apiv2)
+				} else {
+					retmsg, _ = SendResponse(client, err, &message, resp, api, apiv2)
+				}
+			}
+
 		}
 		var resp *dto.GroupMessageResponse
 		// 遍历foundItems并发送每种信息
@@ -342,8 +381,17 @@ func HandleSendGroupMsgRaw(client callapi.Client, api openapi.OpenAPI, apiv2 ope
 							pair.GroupMessage = groupMessage
 							echo.PushGlobalStack(pair)
 						}
-						//发送成功回执
-						retmsg, _ = SendResponse(client, err, &message, resp, api, apiv2)
+
+						if !config.GetNoRetMsg() {
+							//发送成功回执
+							if config.GetThreadsRetMsg() {
+								go SendResponse(client, err, &message, resp, api, apiv2)
+							} else {
+								//发送成功回执
+								retmsg, _ = SendResponse(client, err, &message, resp, api, apiv2)
+							}
+						}
+
 					}
 					continue // 跳过这个项，继续下一个
 				}
@@ -402,8 +450,17 @@ func HandleSendGroupMsgRaw(client callapi.Client, api openapi.OpenAPI, apiv2 ope
 						echo.PushGlobalStack(pair)
 					}
 				}
-				//发送成功回执
-				retmsg, _ = SendResponse(client, err, &message, resp, api, apiv2)
+
+				if !config.GetNoRetMsg() {
+					//发送成功回执
+					if config.GetThreadsRetMsg() {
+						go SendResponse(client, err, &message, resp, api, apiv2)
+					} else {
+						//发送成功回执
+						retmsg, _ = SendResponse(client, err, &message, resp, api, apiv2)
+					}
+				}
+
 			}
 		}
 	case "guild":
@@ -454,7 +511,9 @@ func HandleSendGroupMsgRaw(client callapi.Client, api openapi.OpenAPI, apiv2 ope
 		retmsg, _ = HandleSendGuildChannelPrivateMsg(client, api, apiv2, message, &value, &RChannelID)
 	case "group_private":
 		//用userid还原出openid 这是虚拟成群的群聊私聊信息
-		message.Params.UserID = message.Params.GroupID.(string)
+		if message.Params.GroupID != nil && message.Params.GroupID.(string) != "" {
+			message.Params.UserID = message.Params.GroupID.(string)
+		}
 		retmsg, _ = HandleSendPrivateMsg(client, api, apiv2, message)
 	case "forum":
 		//用GroupID给ChannelID赋值,因为我们是把频道虚拟成了群

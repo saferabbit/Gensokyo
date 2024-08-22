@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/hoshinonyaruko/gensokyo/config"
 )
 
 type LogLevel int
@@ -21,6 +22,8 @@ const (
 	LogLevelWarn
 	LogLevelError
 )
+
+var currentLevel = LogLevelInfo // 默认日志级别为 INFO
 
 type Client struct {
 	conn *websocket.Conn
@@ -87,12 +90,30 @@ func NewMyLogAdapter(level LogLevel, enableFileLog bool) *MyLogAdapter {
 	}
 }
 
+// 获取当前日志文件名
+func getCurrentLogFilename() string {
+	suffixMins := config.GetLogSuffixPerMins()
+	baseFilename := time.Now().Format("2006-01-02")
+	if suffixMins == 0 {
+		return baseFilename + ".log"
+	}
+
+	currentTime := time.Now()
+	currentMinutes := currentTime.Hour()*60 + currentTime.Minute()   // 当前时间的总分钟数
+	windowStartMinutes := (currentMinutes / suffixMins) * suffixMins // 计算当前时间窗口的起始分钟数
+	windowStartHour := windowStartMinutes / 60
+	windowStartMinute := windowStartMinutes % 60
+
+	suffix := fmt.Sprintf("%02d-%02d", windowStartHour, windowStartMinute) // 格式化时间窗口后缀
+	return fmt.Sprintf("%s-%s.log", baseFilename, suffix)
+}
+
 // 文件日志记录函数
 func (adapter *MyLogAdapter) logToFile(level, message string) {
 	if !adapter.EnableFileLog {
 		return
 	}
-	filename := time.Now().Format("2006-01-02") + ".log" // 按日期命名文件
+	filename := getCurrentLogFilename()
 	filepath := adapter.FileLogPath + "/" + filename
 
 	file, err := os.OpenFile(filepath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -113,7 +134,7 @@ func LogToFile(level, message string) {
 	if !enableFileLogGlobal {
 		return
 	}
-	filename := time.Now().Format("2006-01-02") + ".log"
+	filename := getCurrentLogFilename()
 	filepath := logPath + "/" + filename
 
 	file, err := os.OpenFile(filepath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -230,32 +251,56 @@ type EnhancedLogEntry struct {
 // 日志频道，所有的 WebSocket 客户端都会在此监听日志事件
 var logChannel = make(chan EnhancedLogEntry, 1000)
 
+func SetLogLevel(level LogLevel) {
+	if level >= LogLevelDebug && level <= LogLevelError {
+		currentLevel = level
+	} else {
+		log.Printf("Invalid log level: %d", level)
+	}
+}
+
 func Println(v ...interface{}) {
-	log.Println(v...)
-	message := fmt.Sprint(v...)
-	emitLog("INFO", message)
-	LogToFile("INFO", message)
+	if currentLevel <= LogLevelInfo {
+		log.Println(v...)
+		message := fmt.Sprint(v...)
+		emitLog("INFO", message)
+		LogToFile("INFO", message)
+	}
 }
 
 func Printf(format string, v ...interface{}) {
-	log.Printf(format, v...)
-	message := fmt.Sprintf(format, v...)
-	emitLog("INFO", message)
-	LogToFile("INFO", message)
+	if currentLevel <= LogLevelInfo {
+		log.Printf(format, v...)
+		message := fmt.Sprintf(format, v...)
+		emitLog("INFO", message)
+		LogToFile("INFO", message)
+	}
+}
+
+func Warnf(format string, v ...interface{}) {
+	if currentLevel <= LogLevelWarn {
+		log.Printf(format, v...)
+		message := fmt.Sprintf(format, v...)
+		emitLog("WARN", message)
+		LogToFile("WARN", message)
+	}
 }
 
 func Errorf(format string, v ...interface{}) {
-	log.Printf(format, v...)
-	message := fmt.Sprintf(format, v...)
-	emitLog("ERROR", message)
-	LogToFile("ERROR", message)
+	if currentLevel <= LogLevelError {
+		log.Printf(format, v...)
+		message := fmt.Sprintf(format, v...)
+		emitLog("ERROR", message)
+		LogToFile("ERROR", message)
+	}
 }
 
 func Fatalf(format string, v ...interface{}) {
 	log.Printf(format, v...)
 	message := fmt.Sprintf(format, v...)
-	emitLog("Fatal", message)
-	LogToFile("Fatal", message)
+	emitLog("FATAL", message)
+	LogToFile("FATAL", message)
+	os.Exit(1) // Fatal logs usually terminate the program
 }
 
 func emitLog(level, message string) {
